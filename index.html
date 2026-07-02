@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iPod Buddy</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 35%, #2b3340, #171a21);
+    font-family: system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none;
+  }
+  body.desktop { background: transparent; cursor: grab; }
+  body.desktop.grabbing { cursor: grabbing; }
+
+  .stage { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 125px; height: 168px;
+           transition: transform 0.6s ease, opacity 0.6s ease; }
+  /* theater mode: shrink down (he's also put to sleep) so he's not distracting */
+  body.tucked .stage { transform: translate(-50%, -50%) scale(0.5); }
+  #pet { width: 100%; height: 100%; overflow: visible; }
+
+  /* ---- gentle bob (ambient/chill) ---- */
+  @keyframes bob { 0%,100% { transform: translateY(0)   rotate(-1.5deg); }
+                   50%     { transform: translateY(-7px) rotate(1.5deg); } }
+
+  .shadow { transform-box: fill-box; transform-origin: center;
+            animation: shadow 4.5s ease-in-out infinite; }
+  @keyframes shadow { 0%,100% { transform: scaleX(1);   opacity: 0.3; }
+                      50%     { transform: scaleX(0.84); opacity: 0.2; } }
+
+  /* blink (ambient) */
+  .eye-blink { transform-box: fill-box; transform-origin: center; animation: blink 4.8s infinite; }
+  @keyframes blink { 0%,92%,100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
+
+  /* face + fx hidden by default; each mood reveals its own */
+  .eyes-happy, .eyes-dizzy, .eyes-sleep,
+  .mouth-o, .mouth-grin, .mouth-wavy, .mouth-sleep,
+  .screen-dim, .fx-think, .fx-zzz, .fx-spark, .fx-dots, .fx-notes, .wheel-spin { opacity: 0; }
+  .face > *, .screen-dim { transition: opacity 0.18s ease; }
+
+  /* THINKING — cycling thought-dots */
+  .pet.thinking .mouth-smile { opacity: 0; }
+  .pet.thinking .mouth-o     { opacity: 1; }
+  .pet.thinking .fx-dots     { opacity: 1; }
+  .fx-dots .dot { transform-box: fill-box; transform-origin: center; opacity: 0.25; }
+  .pet.thinking .fx-dots .dot { animation: thinkDot 1.3s ease-in-out infinite; }
+  .pet.thinking .fx-dots .d2  { animation-delay: 0.22s; }
+  .pet.thinking .fx-dots .d3  { animation-delay: 0.44s; }
+  @keyframes thinkDot { 0%,55%,100% { opacity: 0.25; transform: translateY(0); }
+                        28%         { opacity: 1;    transform: translateY(-3px); } }
+
+  /* WORKING — wheel spins + music notes drift up */
+  .wheel-spin { transform-box: view-box; transform-origin: 100px 188px; }
+  .pet.working .wheel-spin   { opacity: 1; animation: wheelspin 0.9s linear infinite; }
+  @keyframes wheelspin { to { transform: rotate(360deg); } }
+  .pet.working .eyes-normal  { transform: translateY(2px) scaleY(0.78); }
+  .fx-notes .note { transform-box: fill-box; transform-origin: center; opacity: 0; }
+  .pet.working .fx-notes .note { animation: noteFloat 1.9s ease-in infinite; }
+  .pet.working .fx-notes .note.b { animation-delay: 0.63s; }
+  .pet.working .fx-notes .note.c { animation-delay: 1.26s; }
+  @keyframes noteFloat { 0%   { transform: translate(0,0) rotate(-6deg); opacity: 0; }
+                         20%  { opacity: 1; }
+                         100% { transform: translate(9px,-28px) rotate(10deg); opacity: 0; } }
+
+  /* DONE */
+  @keyframes hop { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-22px); } }
+  .pet.done .eyes-normal { opacity: 0; }
+  .pet.done .eyes-happy  { opacity: 1; }
+  .pet.done .mouth-smile { opacity: 0; }
+  .pet.done .mouth-grin  { opacity: 1; }
+  .pet.done .fx-spark    { opacity: 1; }
+  .pet.done .spark { transform-box: fill-box; transform-origin: center;
+                     animation: twinkle 0.7s ease-in-out infinite alternate; }
+  .pet.done .spark.b { animation-delay: 0.35s; }
+  @keyframes twinkle { from { transform: scale(0.5); } to { transform: scale(1); } }
+
+  /* ERROR */
+  @keyframes shake { 0%,100% { transform: translateX(-7px) rotate(-4deg); }
+                     50%     { transform: translateX(7px)  rotate(4deg); } }
+  .pet.error .eyes-normal { opacity: 0; }
+  .pet.error .eyes-dizzy  { opacity: 1; }
+  .pet.error .mouth-smile { opacity: 0; }
+  .pet.error .mouth-wavy  { opacity: 1; }
+
+  /* SLEEP — screen dims, zzz */
+  .pet.sleep .eyes-normal { opacity: 0; }
+  .pet.sleep .eyes-sleep  { opacity: 1; }
+  .pet.sleep .mouth-smile { opacity: 0; }
+  .pet.sleep .mouth-sleep { opacity: 1; }
+  .pet.sleep .screen-dim  { opacity: 0.6; }
+  .pet.sleep .fx-zzz      { opacity: 1; }
+  .pet.sleep .zz { transform-box: fill-box; transform-origin: center; animation: rise 2.4s linear infinite; }
+  .pet.sleep .zz.b { animation-delay: 0.8s; }
+  .pet.sleep .zz.c { animation-delay: 1.6s; }
+  @keyframes rise { 0% { transform: translate(0,0) scale(0.7); opacity: 0; }
+                    25% { opacity: 0.9; } 100% { transform: translate(6px,-22px) scale(1.1); opacity: 0; } }
+
+  /* ===== mood prominence: the whole LCD changes color ===== */
+  .screen { transition: fill 0.12s ease; }
+  .pet.thinking .screen { fill: #ecd06b; }   /* amber  */
+  .pet.working  .screen { fill: #6fd083; }   /* green  */
+  .pet.done     .screen { fill: #8df06b; }   /* bright green */
+  .pet.error    .screen { fill: #f0746e; }   /* red alert */
+  .pet.sleep    .screen { fill: #586052; }   /* dim */
+
+  /* DONE — quick white screen flash, like a confirmation */
+  .pet.done .screen-flash { animation: flash 0.55s ease-out; }
+  @keyframes flash { 0% { opacity: 0.85; } 100% { opacity: 0; } }
+
+  /* WAKING — screen flickers as it boots out of sleep */
+  .pet.waking .screen-dim { animation: flicker 0.45s ease-out; }
+  @keyframes flicker { 0% { opacity: 0.7; } 18% { opacity: 0; } 38% { opacity: 0.55; }
+                       60% { opacity: 0; } 100% { opacity: 0; } }
+  /* bigger, bolder mood FX */
+  .fx-think { font-size: 38px; }
+  .pet.working .spindot { r: 6.5; }
+
+  /* ===== Claude status halo: red = needs you · yellow = working · green = done ===== */
+  .pet.stat-working { filter: drop-shadow(0 0 8px rgba(242,192,51,0.95)); }
+  .pet.stat-done    { filter: drop-shadow(0 0 9px rgba(69,196,106,0.95)); }
+  .pet.stat-blocked { animation: haloPulse 1.2s ease-in-out infinite; }      /* red breathes to catch your eye */
+  @keyframes haloPulse { 0%,100% { filter: drop-shadow(0 0 6px  rgba(239,68,68,0.85)); }
+                         50%     { filter: drop-shadow(0 0 14px rgba(239,68,68,1)); } }
+
+  /* ===== character switching: only the active skin shows ===== */
+  .pet:not(.char-bonsai)   .bonsai   { display: none; }
+  .pet:not(.char-cassette)   .cassette   { display: none; }
+  .pet:not(.char-mug)        .mug        { display: none; }
+  .pet:not(.char-vinyl)      .vinyl      { display: none; }
+  .pet:not(.char-robot)      .robot      { display: none; }
+
+  /* ===== BONSAI (calm zen plant — no face, near-still by design; FX carry the mood) ===== */
+  .bonsai { transform-box: fill-box; transform-origin: center;
+            filter: drop-shadow(0 7px 8px rgba(0,0,0,0.26)); }
+  .pet.char-bonsai .shadow { animation: none; opacity: 0.18; }     /* keep the ground still */
+  .canopy { transform-box: fill-box; transform-origin: bottom center;
+            transition: transform 1s ease;
+            animation: bonsaiSway 11s ease-in-out infinite; }       /* glacial, barely-there breeze */
+  @keyframes bonsaiSway { 0%,100% { transform: rotate(-0.6deg); } 50% { transform: rotate(0.6deg); } }
+  /* done: blossoms open softly — no bounce (sparkles shared) */
+  .fx-blossom { opacity: 0; }
+  .pet.char-bonsai.done .fx-blossom { opacity: 1; }
+  .pet.char-bonsai.done .blossom { transform-box: fill-box; transform-origin: center;
+                                   animation: bloom 1.1s ease-out; }
+  @keyframes bloom { 0% { transform: scale(0); } 65% { transform: scale(1.1); } 100% { transform: scale(1); } }
+  /* sleep: canopy settles a touch lower */
+  .pet.char-bonsai.sleep .canopy { animation: none; transform: translateY(3px) scaleY(0.95); }
+  /* fireflies after dark — slow drift */
+  .fx-fly { opacity: 0; filter: drop-shadow(0 0 2.5px rgba(255,226,122,0.8)); }
+  .pet.night.char-bonsai .fx-fly { opacity: 1; }
+  .pet.night.char-bonsai .fly { transform-box: fill-box; transform-origin: center;
+                                animation: flit 5s ease-in-out infinite; }
+  .pet.night.char-bonsai .fly.b { animation-delay: 1.7s; }
+  .pet.night.char-bonsai .fly.c { animation-delay: 3.3s; }
+  @keyframes flit { 0% { transform: translate(0,0); opacity: 0; } 25% { opacity: 1; }
+                    50% { transform: translate(6px,-5px); opacity: 0.8; } 75% { opacity: 1; }
+                    100% { transform: translate(-3px,3px); opacity: 0; } }
+  /* night: pot + leaves deepen */
+  .pet.night .pot     { fill: #5f4636; }
+  .pet.night .pot-rim { fill: #4e382a; }
+  .pet.night .foliage-dark { fill: #2c4733; }
+
+  /* ===== CASSETTE (lofi mixtape) — reels are the eyes; they spin while working ===== */
+  .cassette { transform-box: fill-box; transform-origin: center;
+              animation: bob 4.5s ease-in-out infinite;
+              filter: drop-shadow(0 7px 6px rgba(0,0,0,0.3)); }
+  .reel-hub { transform-box: fill-box; transform-origin: center; }
+  .pet.char-cassette.working  .cassette    { animation-duration: 3.2s; }
+  .pet.char-cassette.working  .eyes-normal { transform: none; }      /* keep reels round while spinning */
+  .pet.char-cassette.working  .reel-hub    { animation: wheelspin 1.1s linear infinite; }
+  .pet.char-cassette.thinking .cassette    { animation-duration: 5.5s; }
+  .pet.char-cassette.done     .cassette    { animation: hop 0.55s ease-in-out infinite; }
+  .pet.char-cassette.error    .cassette    { animation: shake 0.34s ease-in-out infinite; }
+  .pet.char-cassette.sleep    .cassette    { animation-duration: 7s; }
+  .pet.char-cassette.sleep .tape-label     { opacity: 0.55; }
+  .pet.night .cassette-body { fill: #3a3530; stroke: #26221d; }
+  .pet.night .tape-label    { fill: #6a6052; }
+
+  /* ===== COFFEE MUG (cozy lofi companion) — steam is the signature ===== */
+  .mug { transform-box: fill-box; transform-origin: center;
+         animation: bob 4.5s ease-in-out infinite;
+         filter: drop-shadow(0 7px 6px rgba(0,0,0,0.3)); }
+  .fx-steam .wisp { transform-box: fill-box; transform-origin: bottom center; }
+  .pet.char-mug .fx-steam .wisp   { animation: steam 3.6s ease-in-out infinite; }
+  .pet.char-mug .fx-steam .wisp.b { animation-delay: 1.2s; }
+  .pet.char-mug .fx-steam .wisp.c { animation-delay: 2.4s; }
+  @keyframes steam { 0%   { opacity: 0;    transform: translateY(5px)  scaleY(0.7); }
+                     30%  { opacity: 0.55; }
+                     70%  { opacity: 0.4; }
+                     100% { opacity: 0;    transform: translateY(-15px) scaleY(1.12); } }
+  .pet.char-mug.working  .mug { animation-duration: 3.4s; }
+  .pet.char-mug.working  .fx-steam .wisp { animation-duration: 2.3s; }   /* brews harder */
+  .pet.char-mug.thinking .mug { animation-duration: 5.5s; }
+  .pet.char-mug.done  .mug { animation: hop 0.55s ease-in-out infinite; }
+  .pet.char-mug.error .mug { animation: shake 0.34s ease-in-out infinite; }
+  .pet.char-mug.sleep .mug { animation-duration: 7s; }
+  .pet.char-mug.sleep .fx-steam { opacity: 0; }   /* coffee's gone cold */
+  .pet.night .mug-body       { fill: #36433f; stroke: #283130; }
+  .pet.night .mug-handle-out { stroke: #283130; }
+  .pet.night .mug-handle-in  { stroke: #36433f; }
+  .pet.night .mug-rim        { fill: #6a6052; }
+
+  /* ===== VINYL (lofi record) — disc spins while working ===== */
+  .vinyl { transform-box: fill-box; transform-origin: center;
+           animation: bob 4.5s ease-in-out infinite;
+           filter: drop-shadow(0 7px 6px rgba(0,0,0,0.3)); }
+  .vinyl-spin { transform-box: view-box; transform-origin: 100px 138px; }
+  .pet.char-vinyl.working  .vinyl      { animation-duration: 3.2s; }
+  .pet.char-vinyl.working  .vinyl-spin { animation: wheelspin 1.6s linear infinite; }
+  .pet.char-vinyl.thinking .vinyl { animation-duration: 5.5s; }
+  .pet.char-vinyl.done  .vinyl { animation: hop 0.55s ease-in-out infinite; }
+  .pet.char-vinyl.error .vinyl { animation: shake 0.34s ease-in-out infinite; }
+  .pet.char-vinyl.sleep .vinyl { animation-duration: 7s; }
+  .pet.night .vinyl-label { fill: #9a6042; }
+
+  /* ===== ROBOT (original) — antenna bulb blinks, faster while working ===== */
+  .robot { transform-box: fill-box; transform-origin: center; animation: bob 4.5s ease-in-out infinite; filter: drop-shadow(0 7px 6px rgba(0,0,0,0.3)); }
+  .robot-bulb { transform-box: fill-box; transform-origin: center; animation: bulbBlink 2.6s ease-in-out infinite; }
+  @keyframes bulbBlink { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+  .pet.char-robot.working  .robot { animation-duration: 3s; }
+  .pet.char-robot.working  .robot-bulb { animation-duration: 0.7s; }
+  .pet.char-robot.thinking .robot { animation-duration: 5.5s; }
+  .pet.char-robot.done  .robot { animation: hop 0.55s ease-in-out infinite; }
+  .pet.char-robot.error .robot { animation: shake 0.34s ease-in-out infinite; }
+  .pet.char-robot.sleep .robot { animation-duration: 7s; }
+
+  /* ===== right-click character chooser ===== */
+  #charmenu { position: fixed; display: none; z-index: 20;
+              background: #20242c; border: 1px solid #353c47; border-radius: 8px;
+              padding: 4px; font: 12px/1 system-ui, sans-serif; color: #e7e9ee;
+              box-shadow: 0 8px 22px rgba(0,0,0,0.45); }
+  #charmenu .mi   { display: flex; align-items: center; gap: 5px; cursor: pointer;
+                    padding: 6px 12px 6px 6px; border-radius: 5px; white-space: nowrap; }
+  #charmenu .mi:hover { background: #3a63c0; }
+  #charmenu .tick { width: 11px; text-align: center; opacity: 0; }
+  #charmenu .mi.active .tick { opacity: 1; }
+  #charmenu .sep { height: 1px; background: #353c47; margin: 4px 6px; }
+  #charmenu .del { margin-left: auto; padding: 0 4px; border-radius: 3px; font-size: 13px;
+                   line-height: 1; color: #9aa3b2; opacity: 0; }
+  #charmenu .mi:hover .del { opacity: 0.65; }
+  #charmenu .del:hover { opacity: 1; color: #ff7a7a; background: rgba(255,90,90,0.18); }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <svg id="pet" viewBox="0 0 200 270" class="pet idle">
+      <defs>
+        <linearGradient id="bodyGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#ffffff"/>
+          <stop offset="1" stop-color="#e7e9ee"/>
+        </linearGradient>
+        <linearGradient id="screenGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#b7c8a6"/>
+          <stop offset="1" stop-color="#9fb48c"/>
+        </linearGradient>
+        <linearGradient id="bodyGradDark" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#2c2d33"/>
+          <stop offset="1" stop-color="#141519"/>
+        </linearGradient>
+      </defs>
+
+      <!-- ground shadow -->
+      <ellipse class="shadow" cx="100" cy="248" rx="44" ry="8" fill="#000"/>
+
+<!-- ===== BONSAI (zen desk plant) ===== -->
+      <g class="bonsai">
+        <!-- shallow terracotta pot with feet -->
+        <rect class="pot-rim" x="56" y="226" width="88" height="7" rx="2.5" fill="#7d5942"/>
+        <path class="pot" d="M60 232 L140 232 Q142 232 141 236 L136 248 Q133 253 125 253 L75 253 Q67 253 64 248 L59 236 Q58 232 60 232 Z" fill="#976f56"/>
+        <path d="M64 236 Q66 246 72 251" fill="none" stroke="#b89a82" stroke-width="2.5" opacity="0.4" stroke-linecap="round"/>
+        <rect x="74"  y="252" width="11" height="4" rx="1.5" fill="#6c4d39"/>
+        <rect x="115" y="252" width="11" height="4" rx="1.5" fill="#6c4d39"/>
+        <!-- soil + gravel -->
+        <ellipse cx="100" cy="230" rx="40" ry="5" fill="#4a3a2c"/>
+        <circle cx="84" cy="229" r="2.4" fill="#6f9e5a"/>
+        <circle cx="112" cy="230" r="2.2" fill="#7a5a44"/>
+        <circle cx="98" cy="231" r="2" fill="#6f9e5a"/>
+        <!-- gnarled tapering trunk -->
+        <path d="M99 230 C95 214 104 202 100 188" fill="none" stroke="#7d6a54" stroke-width="14" stroke-linecap="round"/>
+        <path d="M100 188 C98 178 107 170 103 158" fill="none" stroke="#82704f" stroke-width="10" stroke-linecap="round"/>
+        <path d="M103 158 C102 148 100 140 101 132" fill="none" stroke="#85734f" stroke-width="6.5" stroke-linecap="round"/>
+        <path d="M97 226 C94 212 101 202 99 190" fill="none" stroke="#b7a888" stroke-width="3" opacity="0.55" stroke-linecap="round"/>
+        <!-- branches spreading to the foliage pads -->
+        <path d="M100 150 C84 134 70 106 60 92"  fill="none" stroke="#7d6a54" stroke-width="5" stroke-linecap="round"/>
+        <path d="M100 170 C82 154 66 138 56 128" fill="none" stroke="#7d6a54" stroke-width="5" stroke-linecap="round"/>
+        <path d="M102 162 C122 146 138 122 147 110" fill="none" stroke="#7d6a54" stroke-width="5" stroke-linecap="round"/>
+        <path d="M101 186 C90 174 80 162 74 154" fill="none" stroke="#7d6a54" stroke-width="4" stroke-linecap="round"/>
+        <path d="M101 132 C102 110 104 84 104 66"  fill="none" stroke="#82704f" stroke-width="5" stroke-linecap="round"/>
+        <!-- zen aura -->
+        <ellipse class="bonsai-glow" cx="100" cy="100" rx="78" ry="56" fill="#b6f0bf" opacity="0"/>
+        <!-- layered foliage pads (wide + asymmetric, bonsai-style) -->
+        <g class="canopy">
+          <g class="foliage-dark" fill="#3a5d3e">
+            <ellipse cx="104" cy="60" rx="30" ry="15"/><circle cx="84" cy="53" r="9"/><circle cx="98" cy="47" r="11"/><circle cx="114" cy="49" r="10"/><circle cx="126" cy="56" r="9"/>
+            <ellipse cx="60" cy="88" rx="27" ry="13"/><circle cx="42" cy="82" r="8"/><circle cx="56" cy="78" r="9"/><circle cx="72" cy="81" r="8"/>
+            <ellipse cx="146" cy="106" rx="28" ry="14"/><circle cx="128" cy="98" r="9"/><circle cx="144" cy="94" r="10"/><circle cx="160" cy="100" r="9"/>
+            <ellipse cx="56" cy="126" rx="25" ry="12"/><circle cx="40" cy="120" r="8"/><circle cx="56" cy="116" r="9"/><circle cx="70" cy="121" r="7"/>
+            <ellipse cx="74" cy="151" rx="18" ry="10"/><circle cx="62" cy="146" r="6"/><circle cx="76" cy="143" r="7"/><circle cx="86" cy="148" r="6"/>
+          </g>
+          <g class="foliage-lite" fill="#557d52">
+            <circle cx="94" cy="49" r="6"/><circle cx="108" cy="47" r="6"/><circle cx="120" cy="52" r="5"/>
+            <circle cx="50" cy="80" r="5"/><circle cx="64" cy="79" r="5"/>
+            <circle cx="138" cy="97" r="6"/><circle cx="152" cy="97" r="5"/>
+            <circle cx="48" cy="119" r="5"/><circle cx="62" cy="118" r="4.5"/>
+            <circle cx="68" cy="146" r="4"/><circle cx="80" cy="146" r="4"/>
+          </g>
+          <!-- blossoms (done) -->
+          <g class="fx-blossom">
+            <g class="blossom"><circle cx="100" cy="48" r="3.6" fill="#f4a6c2"/><circle cx="100" cy="48" r="1.4" fill="#ffe27a"/></g>
+            <g class="blossom"><circle cx="58" cy="82"  r="3.6" fill="#f4a6c2"/><circle cx="58" cy="82"  r="1.4" fill="#ffe27a"/></g>
+            <g class="blossom"><circle cx="146" cy="98" r="3.6" fill="#f4a6c2"/><circle cx="146" cy="98" r="1.4" fill="#ffe27a"/></g>
+            <g class="blossom"><circle cx="54" cy="120" r="3.6" fill="#f4a6c2"/><circle cx="54" cy="120" r="1.4" fill="#ffe27a"/></g>
+            <g class="blossom"><circle cx="76" cy="146" r="3.6" fill="#f4a6c2"/><circle cx="76" cy="146" r="1.4" fill="#ffe27a"/></g>
+          </g>
+        </g>
+        <!-- fireflies (night) -->
+        <g class="fx-fly" fill="#ffe27a">
+          <circle class="fly a" cx="38"  cy="116" r="2.6"/>
+          <circle class="fly b" cx="168" cy="100" r="2.6"/>
+          <circle class="fly c" cx="106" cy="40"  r="2.4"/>
+        </g>
+      </g>
+
+      <!-- ===== CASSETTE (lofi mixtape) ===== -->
+      <g class="cassette">
+        <!-- shell -->
+        <rect class="cassette-body" x="30" y="90" width="140" height="90" rx="12" fill="#e6a982" stroke="#cf9268" stroke-width="1.5"/>
+        <ellipse cx="100" cy="100" rx="60" ry="9" fill="#ffffff" opacity="0.25"/>
+        <circle cx="40"  cy="100" r="2.2" fill="#c98a64"/>
+        <circle cx="160" cy="100" r="2.2" fill="#c98a64"/>
+        <circle cx="40"  cy="170" r="2.2" fill="#c98a64"/>
+        <circle cx="160" cy="170" r="2.2" fill="#c98a64"/>
+        <!-- mixtape label -->
+        <rect class="tape-label" x="44" y="97" width="112" height="24" rx="4" fill="#f5ecdd"/>
+        <rect x="47" y="100" width="16" height="18" rx="2" fill="#4f8f95"/>
+        <text x="55" y="113" text-anchor="middle" font-size="11" font-style="italic" font-weight="700" fill="#f5ecdd" font-family="Georgia, serif">A</text>
+        <text x="110" y="112" text-anchor="middle" font-size="11" font-style="italic" font-weight="600" fill="#c4683f" font-family="Georgia, serif">lo-fi</text>
+        <line x1="92" y1="116" x2="128" y2="116" stroke="#4f8f95" stroke-width="1.6" stroke-linecap="round"/>
+        <!-- reel window + exposed tape + bottom holes -->
+        <rect x="46" y="126" width="108" height="30" rx="6" fill="#2a2620"/>
+        <rect x="62" y="151" width="76" height="4" rx="2" fill="#5e4f38"/>
+        <circle cx="88"  cy="174" r="3" fill="#2a2620"/>
+        <circle cx="112" cy="174" r="3" fill="#2a2620"/>
+        <rect x="92" y="175" width="16" height="5" rx="1.5" fill="#2a2620"/>
+        <!-- FACE: reels are the eyes (spin while working); shared classes drive the rest -->
+        <g class="face">
+          <g class="eyes-normal">
+            <g>
+              <circle cx="73" cy="141" r="13" fill="#efe7d4"/>
+              <g class="reel-hub">
+                <circle cx="73" cy="141" r="4.5" fill="#6b5a3f"/>
+                <g stroke="#3a332a" stroke-width="2" stroke-linecap="round">
+                  <line x1="73" y1="133" x2="73" y2="149"/>
+                  <line x1="65.5" y1="137" x2="80.5" y2="145"/>
+                  <line x1="65.5" y1="145" x2="80.5" y2="137"/>
+                </g>
+              </g>
+            </g>
+            <g>
+              <circle cx="127" cy="141" r="13" fill="#efe7d4"/>
+              <g class="reel-hub">
+                <circle cx="127" cy="141" r="4.5" fill="#6b5a3f"/>
+                <g stroke="#3a332a" stroke-width="2" stroke-linecap="round">
+                  <line x1="127" y1="133" x2="127" y2="149"/>
+                  <line x1="119.5" y1="137" x2="134.5" y2="145"/>
+                  <line x1="119.5" y1="145" x2="134.5" y2="137"/>
+                </g>
+              </g>
+            </g>
+          </g>
+          <g class="eyes-happy" fill="none" stroke="#efe7d4" stroke-width="3" stroke-linecap="round">
+            <path d="M63 145 Q73 135 83 145"/>
+            <path d="M117 145 Q127 135 137 145"/>
+          </g>
+          <g class="eyes-dizzy" stroke="#efe7d4" stroke-width="2.8" stroke-linecap="round">
+            <path d="M66 135 L80 149 M80 135 L66 149"/>
+            <path d="M120 135 L134 149 M134 135 L120 149"/>
+          </g>
+          <g class="eyes-sleep" fill="none" stroke="#efe7d4" stroke-width="2.8" stroke-linecap="round">
+            <path d="M63 142 Q73 149 83 142"/>
+            <path d="M117 142 Q127 149 137 142"/>
+          </g>
+          <path class="mouth-smile" d="M89 167 Q100 174 111 167" fill="none" stroke="#3a332a" stroke-width="3" stroke-linecap="round"/>
+          <rect class="mouth-o" x="95" y="166" width="10" height="9" rx="3" fill="#3a332a"/>
+          <path class="mouth-grin" d="M87 167 Q100 177 113 167 Q100 172 87 167 Z" fill="#3a332a"/>
+          <path class="mouth-wavy" d="M89 169 q4 -4 8 0 q4 4 8 0" fill="none" stroke="#3a332a" stroke-width="2.6" stroke-linecap="round"/>
+          <path class="mouth-sleep" d="M95 170 q5 3 10 0" fill="none" stroke="#3a332a" stroke-width="2.4" stroke-linecap="round"/>
+        </g>
+      </g>
+
+      <!-- ===== COFFEE MUG (cozy lofi companion) ===== -->
+      <g class="mug">
+        <!-- handle -->
+        <path class="mug-handle-out" d="M134 176 C160 176 160 212 132 209" fill="none" stroke="#4a7a74" stroke-width="13" stroke-linecap="round"/>
+        <path class="mug-handle-in"  d="M134 176 C160 176 160 212 132 209" fill="none" stroke="#5e948d" stroke-width="8.5" stroke-linecap="round"/>
+        <!-- body -->
+        <path class="mug-body" d="M64 152 L136 152 L132 226 Q131 234 122 234 L78 234 Q69 234 68 226 Z" fill="#5e948d" stroke="#4a7a74" stroke-width="1.5"/>
+        <!-- rim + coffee -->
+        <ellipse class="mug-rim" cx="100" cy="152" rx="36" ry="7" fill="#e8dcc6"/>
+        <ellipse cx="100" cy="151" rx="30" ry="5.4" fill="#43291b"/>
+        <ellipse cx="92" cy="149.5" rx="11" ry="2" fill="#5e3a25" opacity="0.6"/>
+        <!-- accent band -->
+        <rect x="67" y="164" width="66" height="4" fill="#c4683f"/>
+        <rect x="67" y="169" width="66" height="1.6" fill="#e8dcc6" opacity="0.7"/>
+        <!-- steam (signature FX) -->
+        <g class="fx-steam" fill="none" stroke="#e6e0d2" stroke-width="3" stroke-linecap="round">
+          <path class="wisp a" d="M90 148 q-6 -9 0 -18 q6 -9 0 -18"/>
+          <path class="wisp b" d="M100 148 q6 -9 0 -18 q-6 -9 0 -18"/>
+          <path class="wisp c" d="M110 148 q-6 -9 0 -18 q6 -9 0 -18"/>
+        </g>
+        <!-- FACE on the mug (shared mood classes) -->
+        <g class="face">
+          <g class="eyes-normal">
+            <rect class="eye-blink" x="82"  y="183" width="8" height="11" rx="3.2" fill="#f2ead8"/>
+            <rect class="eye-blink" x="110" y="183" width="8" height="11" rx="3.2" fill="#f2ead8"/>
+          </g>
+          <g class="eyes-happy" fill="none" stroke="#f2ead8" stroke-width="3" stroke-linecap="round">
+            <path d="M81 193 Q86 186 91 193"/>
+            <path d="M109 193 Q114 186 119 193"/>
+          </g>
+          <g class="eyes-dizzy" stroke="#f2ead8" stroke-width="2.8" stroke-linecap="round">
+            <path d="M82 185 L90 193 M90 185 L82 193"/>
+            <path d="M110 185 L118 193 M118 185 L110 193"/>
+          </g>
+          <g class="eyes-sleep" fill="none" stroke="#f2ead8" stroke-width="2.8" stroke-linecap="round">
+            <path d="M81 189 Q86 194 91 189"/>
+            <path d="M109 189 Q114 194 119 189"/>
+          </g>
+          <path class="mouth-smile" d="M90 205 Q100 213 110 205" fill="none" stroke="#f2ead8" stroke-width="3" stroke-linecap="round"/>
+          <rect class="mouth-o" x="95" y="204" width="10" height="10" rx="3" fill="#f2ead8"/>
+          <path class="mouth-grin" d="M88 205 Q100 215 112 205 Q100 210 88 205 Z" fill="#f2ead8"/>
+          <path class="mouth-wavy" d="M90 207 q4 -4 8 0 q4 4 8 0" fill="none" stroke="#f2ead8" stroke-width="2.6" stroke-linecap="round"/>
+          <path class="mouth-sleep" d="M95 208 q5 3 10 0" fill="none" stroke="#f2ead8" stroke-width="2.4" stroke-linecap="round"/>
+        </g>
+      </g>
+
+      <!-- ===== VINYL (lofi record) ===== -->
+      <g class="vinyl">
+        <circle cx="100" cy="138" r="60" fill="#1c1c22" stroke="#0a0a0d" stroke-width="1.5"/>
+        <g fill="none" stroke="#2f2f37" stroke-width="1">
+          <circle cx="100" cy="138" r="52"/>
+          <circle cx="100" cy="138" r="45"/>
+          <circle cx="100" cy="138" r="38"/>
+          <circle cx="100" cy="138" r="31"/>
+        </g>
+        <!-- spinning glints (the "it's turning" tell) -->
+        <g class="vinyl-spin">
+          <ellipse cx="100" cy="92"  rx="17" ry="5" fill="#ffffff" opacity="0.10"/>
+          <ellipse cx="132" cy="116" rx="9"  ry="4" fill="#ffffff" opacity="0.07"/>
+          <ellipse cx="78"  cy="170" rx="11" ry="4" fill="#ffffff" opacity="0.05"/>
+        </g>
+        <!-- center label -->
+        <circle class="vinyl-label" cx="100" cy="138" r="23" fill="#d98b5a" stroke="#b06a43" stroke-width="1.2"/>
+        <circle cx="100" cy="138" r="19.5" fill="none" stroke="#c79a78" stroke-width="0.8" opacity="0.6"/>
+        <!-- tonearm -->
+        <line x1="158" y1="82" x2="123" y2="117" stroke="#c6c6cd" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="158" cy="82" r="4" fill="#9a9aa3"/>
+        <circle cx="122" cy="118" r="3.5" fill="#9a9aa3"/>
+        <!-- FACE on the label -->
+        <g class="face">
+          <g class="eyes-normal">
+            <rect class="eye-blink" x="90"  y="131" width="6" height="8" rx="2.6" fill="#f2ead8"/>
+            <rect class="eye-blink" x="104" y="131" width="6" height="8" rx="2.6" fill="#f2ead8"/>
+          </g>
+          <g class="eyes-happy" fill="none" stroke="#f2ead8" stroke-width="2.6" stroke-linecap="round">
+            <path d="M89 137 Q93 132 97 137"/>
+            <path d="M103 137 Q107 132 111 137"/>
+          </g>
+          <g class="eyes-dizzy" stroke="#f2ead8" stroke-width="2.4" stroke-linecap="round">
+            <path d="M90 132 L96 138 M96 132 L90 138"/>
+            <path d="M104 132 L110 138 M110 132 L104 138"/>
+          </g>
+          <g class="eyes-sleep" fill="none" stroke="#f2ead8" stroke-width="2.4" stroke-linecap="round">
+            <path d="M89 135 Q93 139 97 135"/>
+            <path d="M103 135 Q107 139 111 135"/>
+          </g>
+          <path class="mouth-smile" d="M94 146 Q100 151 106 146" fill="none" stroke="#f2ead8" stroke-width="2.6" stroke-linecap="round"/>
+          <rect class="mouth-o" x="97" y="146" width="6" height="6" rx="2" fill="#f2ead8"/>
+          <path class="mouth-grin" d="M94 146 Q100 152 106 146 Q100 150 94 146 Z" fill="#f2ead8"/>
+          <path class="mouth-wavy" d="M94 147 q3 -2.5 6 0 q3 2.5 6 0" fill="none" stroke="#f2ead8" stroke-width="2.2" stroke-linecap="round"/>
+          <path class="mouth-sleep" d="M97 148 q3 2 6 0" fill="none" stroke="#f2ead8" stroke-width="2" stroke-linecap="round"/>
+        </g>
+      </g>
+
+<!-- ===== ROBOT (original) ===== -->
+      <g class="robot">
+        <rect x="70" y="134" width="60" height="50" rx="12" fill="#b3bdc8" stroke="#9aa6b2" stroke-width="1.5"/>
+        <rect x="52" y="138" width="12" height="30" rx="6" fill="#9aa6b2"/>
+        <rect x="136" y="138" width="12" height="30" rx="6" fill="#9aa6b2"/>
+        <rect x="79" y="184" width="18" height="10" rx="4" fill="#9aa6b2"/>
+        <rect x="103" y="184" width="18" height="10" rx="4" fill="#9aa6b2"/>
+        <rect x="82" y="145" width="36" height="20" rx="4" fill="#23262b"/>
+        <circle cx="91" cy="155" r="3" fill="#6fd083"/>
+        <circle cx="100" cy="155" r="3" fill="#f2c644"/>
+        <circle cx="109" cy="155" r="3" fill="#ff6b6b"/>
+        <line x1="100" y1="58" x2="100" y2="44" stroke="#8a97a3" stroke-width="3" stroke-linecap="round"/>
+        <circle class="robot-bulb" cx="100" cy="39" r="6" fill="#ff6b6b"/>
+        <rect x="49" y="84" width="10" height="22" rx="3" fill="#9aa6b2"/>
+        <rect x="141" y="84" width="10" height="22" rx="3" fill="#9aa6b2"/>
+        <rect x="58" y="58" width="84" height="74" rx="16" fill="#c2ccd6" stroke="#9aa6b2" stroke-width="1.5"/>
+        <rect x="68" y="71" width="64" height="48" rx="8" fill="#23262b"/>
+        <g class="face">
+          <g class="eyes-normal">
+            <rect class="eye-blink" x="82" y="86" width="9" height="12" rx="3" fill="#6fd0e0"/>
+            <rect class="eye-blink" x="109" y="86" width="9" height="12" rx="3" fill="#6fd0e0"/>
+          </g>
+          <g class="eyes-happy" fill="none" stroke="#6fd0e0" stroke-width="3" stroke-linecap="round">
+            <path d="M81 94 Q86.5 87 92 94"/>
+            <path d="M108 94 Q113.5 87 119 94"/>
+          </g>
+          <g class="eyes-dizzy" stroke="#6fd0e0" stroke-width="2.6" stroke-linecap="round">
+            <path d="M82 87 L91 97 M91 87 L82 97"/>
+            <path d="M109 87 L118 97 M118 87 L109 97"/>
+          </g>
+          <g class="eyes-sleep" fill="none" stroke="#6fd0e0" stroke-width="2.6" stroke-linecap="round">
+            <path d="M81 92 Q86.5 97 92 92"/>
+            <path d="M108 92 Q113.5 97 119 92"/>
+          </g>
+          <path class="mouth-smile" d="M90 109 Q100 115 110 109" fill="none" stroke="#6fd0e0" stroke-width="2.6" stroke-linecap="round"/>
+          <rect class="mouth-o" x="95" y="108" width="10" height="8" rx="3" fill="#6fd0e0"/>
+          <path class="mouth-grin" d="M89 109 Q100 117 111 109 Q100 113 89 109 Z" fill="#6fd0e0"/>
+          <path class="mouth-wavy" d="M90 111 q5 -3 10 0" fill="none" stroke="#6fd0e0" stroke-width="2.4" stroke-linecap="round"/>
+          <path class="mouth-sleep" d="M95 112 q5 3 10 0" fill="none" stroke="#6fd0e0" stroke-width="2.2" stroke-linecap="round"/>
+        </g>
+      </g>
+
+<!-- mood FX — wrapped + shifted so it sits beside the character on every skin -->
+      <g class="mood-fx" transform="translate(-8, 52)">
+      <text class="fx-think" x="156" y="40" font-size="26" font-weight="800" fill="#ffd166">?</text>
+      <g class="fx-zzz" fill="#dfe6ef" font-weight="700">
+        <text class="zz"   x="150" y="48" font-size="13">z</text>
+        <text class="zz b" x="158" y="40" font-size="16">z</text>
+        <text class="zz c" x="168" y="30" font-size="20">z</text>
+      </g>
+      <g class="fx-spark" fill="#ffd166">
+        <path class="spark a" d="M40 40 l2 6 l6 2 l-6 2 l-2 6 l-2 -6 l-6 -2 l6 -2 z"/>
+        <path class="spark b" d="M162 56 l1.5 5 l5 1.5 l-5 1.5 l-1.5 5 l-1.5 -5 l-5 -1.5 l5 -1.5 z"/>
+      </g>
+      <!-- THINKING: cycling thought-dots -->
+      <g class="fx-dots" fill="#d9b24e">
+        <circle class="dot d1" cx="150" cy="44" r="3.4"/>
+        <circle class="dot d2" cx="160" cy="44" r="3.4"/>
+        <circle class="dot d3" cx="170" cy="44" r="3.4"/>
+      </g>
+      <!-- WORKING: music notes -->
+      <g class="fx-notes" fill="#46b85f" font-family="system-ui, sans-serif" font-weight="700">
+        <text class="note a" x="150" y="66" font-size="18">♪</text>
+        <text class="note b" x="161" y="58" font-size="14">♫</text>
+        <text class="note c" x="146" y="56" font-size="13">♪</text>
+      </g>
+      </g>
+    </svg>
+  </div>
+
+  <!-- right-click chooser -->
+  <div id="charmenu">
+    <div class="mi" data-act="shuffle"><span class="tick">✓</span>🔀 Shuffle</div>
+    <div class="sep"></div>
+    <div class="mi" data-char="bonsai"><span class="tick">✓</span>Bonsai</div>
+    <div class="mi" data-char="cassette"><span class="tick">✓</span>Cassette</div>
+    <div class="mi" data-char="mug"><span class="tick">✓</span>Coffee</div>
+    <div class="mi" data-char="vinyl"><span class="tick">✓</span>Vinyl</div>
+    <div class="mi" data-char="robot"><span class="tick">✓</span>Robot 🤖</div>
+    <div class="sep" data-act="restore-sep" style="display:none"></div>
+    <div class="mi" data-act="restore" style="display:none"><span class="tick"> </span>↺ Restore all</div>
+  </div>
+
+  <script>
+    const pet = document.getElementById('pet');
+    const MOODS = ['idle', 'thinking', 'working', 'done', 'error', 'sleep'];
+    let current = 'idle';
+
+    function setMood(m) {
+      if (!MOODS.includes(m) || m === current) return;
+      const prev = current;
+      pet.classList.remove(...MOODS);
+      pet.classList.add(m);
+      current = m;
+      // boot/flicker when he wakes out of sleep
+      if (prev === 'sleep' && m !== 'sleep') {
+        pet.classList.add('waking');
+        clearTimeout(window._wake);
+        window._wake = setTimeout(() => pet.classList.remove('waking'), 470);
+      }
+    }
+
+    // ===== Claude status light (red = needs you, yellow = working, green = done) =====
+    const STATS = ['stat-working', 'stat-blocked', 'stat-done'];
+    function setStatus(s) {
+      pet.classList.remove(...STATS);
+      if (s && s !== 'none') pet.classList.add('stat-' + s);
+      // a "needs you" signal must never be hidden by a sleeping pet
+      if (s === 'blocked' && current === 'sleep') setMood('idle');
+    }
+
+    // ===== evening dark mode: black iPod from 6pm to 6am =====
+    function applyTheme() {
+      const h = new Date().getHours();
+      pet.classList.toggle('night', h >= 18 || h < 6);
+    }
+    applyTheme();
+    setInterval(applyTheme, 60 * 1000);
+
+    // ===== character skins + right-click chooser =====
+    const menu = document.getElementById('charmenu');
+    const CHARS = [...menu.querySelectorAll('.mi[data-char]')].map(mi => mi.dataset.char);  // derived from the menu
+    let charCur = localStorage.getItem('petChar') || 'robot';
+    let shuffle = localStorage.getItem('petShuffle') === '1';
+    let shuffleTimer;
+    let removed = new Set(JSON.parse(localStorage.getItem('petRemoved') || '[]'));
+    const liveChars = () => CHARS.filter(c => !removed.has(c));
+    const saveRemoved = () => localStorage.setItem('petRemoved', JSON.stringify([...removed]));
+
+    function scheduleShuffle() {
+      clearTimeout(shuffleTimer);
+      shuffleTimer = setTimeout(() => {
+        const pool = liveChars().filter(c => c !== charCur); // live props only, never the current one
+        if (pool.length) setChar(pool[Math.floor(Math.random() * pool.length)]);
+        scheduleShuffle();
+      }, 300000 + Math.random() * 300000);                   // swap props every 5–10 min
+    }
+    function setShuffle(on) {
+      shuffle = on;
+      localStorage.setItem('petShuffle', on ? '1' : '0');
+      if (on) scheduleShuffle(); else clearTimeout(shuffleTimer);
+      updateMenu();
+    }
+
+    function setChar(c) {
+      if (!CHARS.includes(c)) return;
+      pet.classList.remove(...CHARS.map(c => 'char-' + c));
+      pet.classList.add('char-' + c);
+      charCur = c;
+      localStorage.setItem('petChar', c);
+      updateMenu();
+    }
+    function updateMenu() {
+      menu.querySelectorAll('.mi').forEach(mi => {
+        if (mi.dataset.act === 'shuffle') { mi.classList.toggle('active', shuffle); return; }
+        if (mi.dataset.act === 'restore') { mi.style.display = removed.size ? 'flex' : 'none'; return; }
+        mi.style.display = removed.has(mi.dataset.char) ? 'none' : 'flex';
+        mi.classList.toggle('active', !shuffle && mi.dataset.char === charCur);
+      });
+      const rsep = menu.querySelector('[data-act="restore-sep"]');
+      if (rsep) rsep.style.display = removed.size ? 'block' : 'none';
+    }
+    function deleteChar(c) {
+      if (liveChars().length <= 1) return;            // always keep at least one prop
+      removed.add(c); saveRemoved();
+      if (charCur === c) setChar(liveChars()[0]);     // hop off the one we just removed
+      updateMenu();
+    }
+    function restoreAll() { removed.clear(); saveRemoved(); updateMenu(); }
+    function closeMenu() {
+      if (menu.style.display === 'none') return;
+      menu.style.display = 'none';
+      if (window.petAPI && window.petAPI.menu) window.petAPI.menu(false);   // shrink back to pet-size
+    }
+    document.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (window.petAPI && window.petAPI.menu) {
+        window.petAPI.menu(true);                  // grow the window so the whole menu fits
+        menu.style.display = 'block';
+        menu.style.left = '8px';                   // park it top-left of the grown window
+        menu.style.top  = '8px';
+      } else {                                      // browser preview: position at the cursor
+        menu.style.display = 'block';
+        const mw = menu.offsetWidth, mh = menu.offsetHeight;
+        menu.style.left = Math.min(e.clientX, window.innerWidth  - mw - 4) + 'px';
+        menu.style.top  = Math.min(e.clientY, window.innerHeight - mh - 4) + 'px';
+      }
+    });
+    menu.addEventListener('click', (e) => {
+      if (e.target.classList.contains('del')) {                  // the little ×: remove this prop
+        deleteChar(e.target.closest('.mi').dataset.char);
+        return;                                                  // keep the menu open
+      }
+      const mi = e.target.closest('.mi');
+      if (mi) {
+        if (mi.dataset.act === 'shuffle') setShuffle(!shuffle);  // toggle auto-rotate
+        else if (mi.dataset.act === 'restore') { restoreAll(); return; }  // bring them all back
+        else { setShuffle(false); setChar(mi.dataset.char); }    // manual pick locks the prop
+      }
+      closeMenu();
+    });
+    window.addEventListener('click', (e) => {
+      if (menu.style.display === 'block' && !e.target.closest('#charmenu')) closeMenu();
+    });
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+    // give each prop a little × to remove it
+    menu.querySelectorAll('.mi[data-char]').forEach(mi => {
+      const x = document.createElement('span');
+      x.className = 'del'; x.textContent = '×'; x.title = 'Remove this prop';
+      mi.appendChild(x);
+    });
+    // start on a skin that actually exists in this build (handles removed skins + the public build)
+    if (!CHARS.includes(charCur) || removed.has(charCur)) charCur = liveChars()[0] || CHARS[0];
+    setChar(charCur);
+    if (shuffle) scheduleShuffle();
+
+    // ===== desktop pet mode (Electron only) =====
+    if (window.petAPI) {
+      document.body.classList.add('desktop');
+
+      let dragging = false, sx = 0, sy = 0, lx = 0, ly = 0, tucked = false;
+
+      // double-click = theater mode: shrink + put him to sleep (watching Netflix/TV)
+      document.body.addEventListener('dblclick', () => {
+        tucked = !tucked;
+        document.body.classList.toggle('tucked', tucked);
+        if (tucked) setMood('sleep');
+      });
+      document.body.addEventListener('mousedown', (e) => {
+        if (e.button !== 0 || e.target.closest('#charmenu') || menu.style.display === 'block') return;   // ignore right-click, the menu, and clicks while it's open
+        dragging = true; sx = lx = e.screenX; sy = ly = e.screenY;
+        document.body.classList.add('grabbing');
+      });
+      window.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        window.petAPI.move(e.screenX - lx, e.screenY - ly);
+        lx = e.screenX; ly = e.screenY;
+      });
+      window.addEventListener('mouseup', (e) => {
+        if (!dragging) return;
+        dragging = false;
+        document.body.classList.remove('grabbing');
+        if (!tucked && Math.hypot(e.screenX - sx, e.screenY - sy) < 4) {
+          setMood('done');               // poke him -> quick happy reaction
+          pokeUntil = performance.now() + 1400;
+        }
+      });
+
+      // mood is decided in main (your keyboard/mouse activity + Claude); just apply it.
+      // a poke briefly wins so his happy reaction isn't instantly overwritten.
+      let pokeUntil = 0;
+      window.petAPI.onMood((m) => {
+        if (tucked) return;                  // theater mode: stay small + asleep
+        if (performance.now() < pokeUntil) return;
+        setMood(m);
+      });
+      // Claude status light (independent of the skin/mood — shows on every prop)
+      if (window.petAPI.onStatus) window.petAPI.onStatus(setStatus);
+
+      // ===== active wander: ambles to new spots, roaming ACROSS monitors =====
+      const MARGIN = 6;
+      function scheduleWander(ms) {
+        clearTimeout(window._wander);
+        window._wander = setTimeout(wander, ms);
+      }
+      function displayAt(L, x, y) {
+        return L.displays.find(s => x >= s.x && x < s.x + s.width && y >= s.y && y < s.y + s.height);
+      }
+      // a resting spot hugging the left or right edge of a display, anywhere up/down
+      function edgeSpot(d, win) {
+        const minX = d.x + MARGIN, maxX = d.x + d.width - win.w - MARGIN;
+        const minY = d.y + MARGIN, maxY = d.y + d.height - win.h - MARGIN;
+        const band = Math.min(30, Math.max(1, maxX - minX) * 0.12);
+        const x = Math.random() < 0.5 ? minX + Math.random() * band : maxX - Math.random() * band;
+        const y = minY + Math.random() * Math.max(1, maxY - minY);
+        return { x, y };
+      }
+      // waypoints that hand the window from display A to B across their SHARED edge, so it
+      // travels on real screen pixels instead of diagonally through the empty gap
+      function crossing(A, B, win) {
+        const w = win.w, h = win.h, m = MARGIN;
+        const oTop = Math.max(A.y, B.y), oBot = Math.min(A.y + A.height, B.y + B.height);
+        const oL = Math.max(A.x, B.x), oR = Math.min(A.x + A.width, B.x + B.width);
+        if (oBot - oTop >= h + 2 * m) {                 // side by side -> cross the vertical seam
+          const y = oTop + m + Math.random() * (oBot - oTop - h - 2 * m);
+          const right = B.x > A.x;
+          return [{ x: right ? A.x + A.width - w - m : A.x + m, y },
+                  { x: right ? B.x + m : B.x + B.width - w - m, y }];
+        }
+        if (oR - oL >= w + 2 * m) {                     // stacked -> cross the horizontal seam
+          const x = oL + m + Math.random() * (oR - oL - w - 2 * m);
+          const below = B.y > A.y;
+          return [{ x, y: below ? A.y + A.height - h - m : A.y + m },
+                  { x, y: below ? B.y + m : B.y + B.height - h - m }];
+        }
+        return null;                                    // monitors only touch at a corner -> skip
+      }
+      function wander() {
+        // roam while he's up and about; park when dragged, asleep, or tucked away
+        if (dragging || tucked || current === 'sleep') return scheduleWander(2000);
+        const L = window.petAPI.getLayout();
+        if (!L || !L.displays || !L.displays.length) return scheduleWander(2000);
+        const here = displayAt(L, L.win.x + L.win.w / 2, L.win.y + L.win.h / 2) || L.displays[0];
+        // ~45% of the time, head over to another monitor (crossing only via a shared edge)
+        let dest = here;
+        if (L.displays.length > 1 && Math.random() < 0.45) {
+          const others = L.displays.filter(s => s !== here);
+          dest = others[Math.floor(Math.random() * others.length)];
+        }
+        const path = [];
+        if (dest !== here) {
+          const cross = crossing(here, dest, L.win);
+          if (cross) path.push(...cross);
+          else dest = here;
+        }
+        path.push(edgeSpot(dest, L.win));
+        glidePath(L.win.x, L.win.y, path);
+      }
+      // glide through the waypoints in turn, resting only once he arrives
+      function glidePath(x0, y0, pts) {
+        let i = 0, sx = x0, sy = y0;
+        (function seg() {
+          if (i >= pts.length) return scheduleWander(180000 + Math.random() * 180000); // rest ~3–6 min
+          const p = pts[i++];
+          glideTo(sx, sy, p.x, p.y, () => { sx = p.x; sy = p.y; seg(); });
+        })();
+      }
+      function glideTo(x0, y0, x1, y1, done) {
+        const dist = Math.hypot(x1 - x0, y1 - y0);
+        const dur = Math.min(30000, 6000 + dist * 22);   // higher = slower roam
+        const t0 = performance.now();
+        function step(now) {
+          if (dragging) return scheduleWander(1200);    // user grabbed him
+          const t = Math.min(1, (now - t0) / dur);
+          const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // easeInOut
+          // ABSOLUTE position each frame (not a delta) — this is the fix: it can't desync
+          // against a window constraint, so it never gets stuck partway between monitors
+          window.petAPI.moveTo(x0 + (x1 - x0) * e, y0 + (y1 - y0) * e);
+          if (t < 1) requestAnimationFrame(step);
+          else done();
+        }
+        requestAnimationFrame(step);
+      }
+      scheduleWander(6000);
+    }
+  </script>
+</body>
+</html>

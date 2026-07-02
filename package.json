@@ -1,0 +1,32 @@
+{
+  "name": "agent-pet",
+  "version": "0.1.0",
+  "description": "A floating desktop pet that shows your AI coding agent's status at a glance — red = needs you, yellow = working, green = done.",
+  "main": "main.js",
+  "author": "Agent Pet authors",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "start:detached": "node start-detached.js",
+    "setup": "node install.js",
+    "unsetup": "node install.js --remove",
+    "build:public": "node build-public.js",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "keywords": ["claude-code", "desktop-pet", "electron", "status", "ai-agent"],
+  "build": {
+    "appId": "com.agentpet.app",
+    "productName": "Agent Pet",
+    "files": ["main.js", "preload.js", "index.html", "install.js", "hooks/**/*"],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}
