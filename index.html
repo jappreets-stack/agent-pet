@@ -66,6 +66,11 @@
 
   /* DONE */
   @keyframes hop { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-22px); } }
+  /* DONE spin — a quick celebratory 360 + pop so a finished turn is unmistakable */
+  @keyframes doneSpin { 0%   { transform: rotate(0deg)   scale(1);    }
+                        60%  { transform: rotate(360deg) scale(1.1);  }
+                        80%  { transform: rotate(360deg) scale(0.97); }
+                        100% { transform: rotate(360deg) scale(1);    } }
   .pet.done .eyes-normal { opacity: 0; }
   .pet.done .eyes-happy  { opacity: 1; }
   .pet.done .mouth-smile { opacity: 0; }
@@ -142,6 +147,7 @@
   /* done: blossoms open softly — no bounce (sparkles shared) */
   .fx-blossom { opacity: 0; }
   .pet.char-bonsai.done .fx-blossom { opacity: 1; }
+  .pet.char-bonsai.done .bonsai { animation: doneSpin 1.4s ease-in-out; }   /* gentle turn — signals done, stays calm */
   .pet.char-bonsai.done .blossom { transform-box: fill-box; transform-origin: center;
                                    animation: bloom 1.1s ease-out; }
   @keyframes bloom { 0% { transform: scale(0); } 65% { transform: scale(1.1); } 100% { transform: scale(1); } }
@@ -171,7 +177,7 @@
   .pet.char-cassette.working  .eyes-normal { transform: none; }      /* keep reels round while spinning */
   .pet.char-cassette.working  .reel-hub    { animation: wheelspin 1.1s linear infinite; }
   .pet.char-cassette.thinking .cassette    { animation-duration: 5.5s; }
-  .pet.char-cassette.done     .cassette    { animation: hop 0.55s ease-in-out infinite; }
+  .pet.char-cassette.done     .cassette    { animation: doneSpin 0.9s ease-out; }
   .pet.char-cassette.error    .cassette    { animation: shake 0.34s ease-in-out infinite; }
   .pet.char-cassette.sleep    .cassette    { animation-duration: 7s; }
   .pet.char-cassette.sleep .tape-label     { opacity: 0.55; }
@@ -193,7 +199,7 @@
   .pet.char-mug.working  .mug { animation-duration: 3.4s; }
   .pet.char-mug.working  .fx-steam .wisp { animation-duration: 2.3s; }   /* brews harder */
   .pet.char-mug.thinking .mug { animation-duration: 5.5s; }
-  .pet.char-mug.done  .mug { animation: hop 0.55s ease-in-out infinite; }
+  .pet.char-mug.done  .mug { animation: doneSpin 0.9s ease-out; }
   .pet.char-mug.error .mug { animation: shake 0.34s ease-in-out infinite; }
   .pet.char-mug.sleep .mug { animation-duration: 7s; }
   .pet.char-mug.sleep .fx-steam { opacity: 0; }   /* coffee's gone cold */
@@ -210,7 +216,7 @@
   .pet.char-vinyl.working  .vinyl      { animation-duration: 3.2s; }
   .pet.char-vinyl.working  .vinyl-spin { animation: wheelspin 1.6s linear infinite; }
   .pet.char-vinyl.thinking .vinyl { animation-duration: 5.5s; }
-  .pet.char-vinyl.done  .vinyl { animation: hop 0.55s ease-in-out infinite; }
+  .pet.char-vinyl.done  .vinyl { animation: doneSpin 0.9s ease-out; }
   .pet.char-vinyl.error .vinyl { animation: shake 0.34s ease-in-out infinite; }
   .pet.char-vinyl.sleep .vinyl { animation-duration: 7s; }
   .pet.night .vinyl-label { fill: #9a6042; }
@@ -222,7 +228,7 @@
   .pet.char-robot.working  .robot { animation-duration: 3s; }
   .pet.char-robot.working  .robot-bulb { animation-duration: 0.7s; }
   .pet.char-robot.thinking .robot { animation-duration: 5.5s; }
-  .pet.char-robot.done  .robot { animation: hop 0.55s ease-in-out infinite; }
+  .pet.char-robot.done  .robot { animation: doneSpin 0.9s ease-out; }
   .pet.char-robot.error .robot { animation: shake 0.34s ease-in-out infinite; }
   .pet.char-robot.sleep .robot { animation-duration: 7s; }
 

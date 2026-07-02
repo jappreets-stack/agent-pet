@@ -81,7 +81,7 @@ function computeMood() {
   // While a turn is active or waiting on you, NEVER fall through to sleep — the light must stay visible.
   if (isBusy(s, age))                          return 'working';
   if (s === 'blocked' && age < 30 * 60 * 1000) return 'idle';           // calm body; the red light does the talking
-  if (s === 'done'    && age < 2500)           return 'done';            // brief celebration, then it settles
+  if (s === 'done'    && age < 3500)           return 'done';            // celebratory spin, then it settles
   const idle = powerMonitor.getSystemIdleTime();     // seconds since last keyboard/mouse input
   if (idle < 3)   return 'working';                  // you're typing / moving the cursor
   if (idle < 450) return 'idle';                     // present but paused -> calm, awake, roaming
