@@ -173,6 +173,7 @@
               animation: bob 4.5s ease-in-out infinite;
               filter: drop-shadow(0 7px 6px rgba(0,0,0,0.3)); }
   .reel-hub { transform-box: fill-box; transform-origin: center; }
+  .pet.char-cassette .reel-hub { animation: wheelspin 9s linear infinite; }   /* idle: reels turn slowly — always a little alive */
   .pet.char-cassette.working  .cassette    { animation-duration: 3.2s; }
   .pet.char-cassette.working  .eyes-normal { transform: none; }      /* keep reels round while spinning */
   .pet.char-cassette.working  .reel-hub    { animation: wheelspin 1.1s linear infinite; }
@@ -213,6 +214,7 @@
            animation: bob 4.5s ease-in-out infinite;
            filter: drop-shadow(0 7px 6px rgba(0,0,0,0.3)); }
   .vinyl-spin { transform-box: view-box; transform-origin: 100px 138px; }
+  .pet.char-vinyl .vinyl-spin { animation: wheelspin 10s linear infinite; }   /* idle: record spins slowly at rest */
   .pet.char-vinyl.working  .vinyl      { animation-duration: 3.2s; }
   .pet.char-vinyl.working  .vinyl-spin { animation: wheelspin 1.6s linear infinite; }
   .pet.char-vinyl.thinking .vinyl { animation-duration: 5.5s; }
